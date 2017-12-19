@@ -1,0 +1,34 @@
+#include <stdio.h>
+
+#include <netdb.h> //gethostbyname
+#include <sys/socket.h>   
+
+void gethostbyname(char *name){
+
+}
+
+void socket(int af_inet, int sock_stream, 0){
+
+}
+
+void connect(int fd, struct sockaddr*){
+
+}
+
+void send(int s, const void *buf, size_t len, int flags){
+
+}
+
+void recv(int s, void *buf, size_t len, int flags){
+
+}
+
+void close(int s){
+
+}
+
+int main(int args, char *argv[]){
+
+
+
+}
