@@ -15,7 +15,7 @@
 int main(int argc, char *argv[]){
  
   // int no;
-  unsigned short port = 5002; //port number
+  unsigned short port = 5001; //port number
   int ssoc; //server socket
   int csoc; //client socket
 
@@ -38,23 +38,23 @@ int main(int argc, char *argv[]){
   srvAddr.sin_family = AF_INET;
   srvAddr.sin_addr.s_addr = htonl(INADDR_ANY);
   
-  /*creat socket ソケットを作成する*/
+  /*creat socket*/
   ssoc = socket(AF_INET, SOCK_STREAM, 0);
   if(ssoc == -1){
     fprintf(stderr, "Can not create socket \n");
     return -1;
   }
 
-  /*bind socket ソケットに名前をつける*/
+  /*bind socket*/
   if(bind(ssoc, (struct sockaddr*)&srvAddr, sizeof(srvAddr)) < 0){
     printf("Can not bind\n");
     return -1;
   };
 
-  /*listen socket 接続要求を待つ*/
+  /*listen socket*/
   listen(ssoc, 1);
 
-  /*Accept 接続要求を受け付ける*/
+  /*Accept*/
   printf("Waiting for connection ...\n");
   if((csoc = 
       accept(ssoc, (struct sockaddr*)&cliAddr, &cliAddrSize)) < 0) {
@@ -63,7 +63,7 @@ int main(int argc, char *argv[]){
   } 
   printf("Connected from %s\n", inet_ntoa(cliAddr.sin_addr));
   
-  /*Receive data メッセージを受信する*/
+  /*Receive data*/
     rc = recv(csoc, buf, sizeof(buf), 0);
     if(rc == 0){
       printf("client process end.\n");
@@ -74,7 +74,7 @@ int main(int argc, char *argv[]){
     }
     
 
-  /*Send data メッセージを送信する*/
+  /*Send data*/
   send(csoc, buf, strlen(buf), 0);
 
   close(csoc);
