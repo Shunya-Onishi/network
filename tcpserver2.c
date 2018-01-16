@@ -18,22 +18,25 @@ int main(){
 
   /*ソケットを作成する*/
 
-  int s;
-  s = socket(AF_INET, SOCK_STREAM, 0);
-  if(s<0){
+  int sockfd;
+  sockfd = socket(AF_INET, SOCK_STREAM, 0);
+  if(sockfd < 0){
     printf("Error : can't make socket\n");
     return(-1);
   }
 
   /*ソケットに名前をつける*/
 
-  struct sockaddr_in sa;
-  sa.sin_family = AF_INET;
-  sa.sin_port = htons(PORT_NO);
-  sa.sin_addr.s_addr = INADDR_ANY;
+  struct sockaddr_in reader_addr;
+
+  memset((char*)&reader_addr, 0, sizeof(reader_addr));
+
+  reader_addr.sin_family = AF_INET; /*インターネットドメイン*/
+  reader_addr.sin_addr.s_addr = htonl(INADDR_ANY); /*任意のIPアドレスを受付*/
+  reader_addr.sin_port = htons(PORT_NO); /*接続待ちのポート番号を設定*/
 
   int name;
-  name = bind(s, (struct sockaddr *) &sa, sizeof(sa));
+  name = bind(sockfd, (struct sockaddr *)&reader_addr, sizeof(reader_addr));
   if(name < 0){
     printf("Error : bind\n");
     return(-1);
@@ -42,9 +45,10 @@ int main(){
   /*接続要求を待つ*/
 
   int wait;
-  wait = listen(s,5);
+  wait = listen(sockfd,5);
   if(wait < 0){
     printf("Error : listen\n");
+    close(sockfd);
     return(-1);
   }
 
@@ -54,7 +58,7 @@ int main(){
   
   int new_s;
   socklen_t len = sizeof(client);
-  new_s = accept(s, (struct sockaddr *)&client, &len);
+  new_s = accept(sockfd, (struct sockaddr *)&client, &len);
   if(new_s < 0){
     printf("Error : accept\n");
     return(-1);

@@ -28,9 +28,9 @@ int main(int argc, char *argv[]){
 
   /*ソケットを作成する*/
 
-  int csoc;
-  csoc = socket(AF_INET, SOCK_STREAM, 0);
-  if(csoc < 0){
+  int s;
+  s = socket(AF_INET, SOCK_STREAM, 0);
+  if(s < 0){
     printf("Error : can't make socket\n");
     return(-1);
   }
@@ -43,28 +43,26 @@ int main(int argc, char *argv[]){
   bzero((char*)&sa.sin_addr, sizeof(sa.sin_addr));
   memcpy((char*)&sa.sin_addr, (char*)hostname -> h_addr, hostname -> h_length);
 
-  if(connect(csoc, (struct sockaddr *) &sa, sizeof(sa)) < 0){
+  if(connect(s, (struct sockaddr *) &sa, sizeof(sa)) < 0){
     printf("Error : can't connect\n");
     return(-1);
   }
 
   /*メッセージを送信する*/
 
-  char line[9999];
-  scanf("%s",line);
-  send(csoc, line, sizeof(line), 0);
-  
+  char str[] = "akutagawa kouhei\r\n";
+  send(s, str, sizeof(str), 0);
 
   /*メッセージを受信する*/
 
-  char buf[100];
-  recv(csoc, buf, sizeof(buf), 0);
+  char ItoC[100];
+  recv(s, ItoC, sizeof(ItoC), 0);
 
-  printf("%s\n", buf);
+  printf("%s\n", ItoC);
 
   /*ソケットを削除する*/
 
-  close(csoc);
+  close(s);
 
   return 0;
 

@@ -2,15 +2,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include <meibo-prog.h>
-
 #define MAX_LINE_LEN 1024
 #define MAXSTR 69
 #define MAXPRO 10000
 #define MAX_ID_LEN 31
 #define MAX_BIRTH_LEN 10
-
 
 int back = 0;
 int ditems;

@@ -11,6 +11,7 @@
 #include <strings.h>
 #include <unistd.h> //close
 #include <fcntl.h>
+#include "meibo-prog.h"
 
 #define PORT_NO 10016
 
@@ -69,6 +70,7 @@ int main(){
 
   /*処理部*/
 
+  
   
   /*メッセージの送信*/
 
