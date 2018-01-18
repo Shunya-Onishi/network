@@ -11,6 +11,31 @@
 #include <fcntl.h>
 
 #define PORT_NO 10016
+#define MAX_LINE_LEN 1024
+
+int subst(char *str, char c1, char c2)
+{
+  int n = 0;
+
+  while (*str) {
+    if (*str == c1) {
+      *str = c2;
+      n++;
+    }
+    str++;
+  }
+  return n;
+}
+
+int get_line(FILE *fp,char *line)
+{
+  if (fgets(line, MAX_LINE_LEN + 1, fp) == NULL)
+    return 0;
+
+  subst(line, '\n','\0');
+
+  return 1;
+}
 
 int main(int argc, char *argv[]){
 
@@ -28,43 +53,60 @@ int main(int argc, char *argv[]){
 
   /*ソケットを作成する*/
 
-  int csoc;
-  csoc = socket(AF_INET, SOCK_STREAM, 0);
-  if(csoc < 0){
+  int sockfd;
+  sockfd = socket(AF_INET, SOCK_STREAM, 0);
+  if(sockfd < 0){
     printf("Error : can't make socket\n");
     return(-1);
   }
 
   /*コネクションを確立する*/
 
-  struct sockaddr_in sa;
-  sa.sin_family = hostname -> h_addrtype;
-  sa.sin_port = htons(PORT_NO);
-  bzero((char*)&sa.sin_addr, sizeof(sa.sin_addr));
-  memcpy((char*)&sa.sin_addr, (char*)hostname -> h_addr, hostname -> h_length);
+  struct sockaddr_in client_addr;
 
-  if(connect(csoc, (struct sockaddr *) &sa, sizeof(sa)) < 0){
+  // memset((char*)&client_addr.sin_addr, 0, sizeof(client_addr.sin_addr));
+
+  memset((char*)&client_addr, 0, sizeof(client_addr));
+
+  client_addr.sin_family = hostname -> h_addrtype;
+  memcpy((char*)&client_addr.sin_addr, (char*)hostname -> h_addr, hostname -> h_length);
+  client_addr.sin_port = htons(PORT_NO);
+
+  if(connect(sockfd, (struct sockaddr *)&client_addr, sizeof(client_addr)) < 0){
     printf("Error : can't connect\n");
     return(-1);
   }
 
   /*メッセージを送信する*/
 
-  char line[9999];
-  scanf("%s",line);
-  send(csoc, line, sizeof(line), 0);
-  
+  char line[MAX_LINE_LEN + 1];
+  //get_line(line);
+  get_line(stdin, line);
+  //send();
+  int check;
+  check = send(sockfd, line, sizeof(line), 0);
+
+  if(check < 0){
+    printf("Error : can't send\n");
+    return(-1);
+  };
 
   /*メッセージを受信する*/
 
-  char buf[100];
-  recv(csoc, buf, sizeof(buf), 0);
+  char kekka[MAX_LINE_LEN + 1];
+  if(recv(sockfd, kekka, sizeof(kekka), 0) < 0){
+    printf("Error : can't recv\n");
+    return(-1);
+  };
 
-  printf("%s\n", buf);
+  printf("%s\n", kekka);
 
   /*ソケットを削除する*/
 
-  close(csoc);
+  if(close(sockfd) < 0){
+    printf("Error : can't close\n");
+    return(-1);
+  };
 
   return 0;
 

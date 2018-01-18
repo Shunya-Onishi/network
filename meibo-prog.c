@@ -2,8 +2,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 
-#include <meibo-prog.h>
 
 #define MAX_LINE_LEN 1024
 #define MAXSTR 69
@@ -37,7 +38,7 @@ struct profile {
 struct profile profile_data_store[MAXPRO];
 int profile_data_nitems = 0; 
 
-void parse_line(char *line);
+void parse_line(char *line, int new_s);
 
 /*[5]*/
 int subst(char *str, char c1, char c2)
@@ -133,9 +134,12 @@ void cmd_quit(char *param)
   }
 }
 /*[11]*/
-void cmd_check()
+void cmd_check(int new_s)
 {
-  printf("登録件数は%d件です．\n", profile_data_nitems);
+  //printf("登録件数は%d件です．\n", profile_data_nitems);
+  char s[MAX_LINE_LEN + 1] = {'\0'};
+  snprintf(s, MAX_LINE_LEN, "登録件数は%d件です．", profile_data_nitems);
+  send(new_s, s, sizeof(s), 0);
 }
 /*[12]*/
 char *date_to_string(char buf[], struct date *date)
@@ -183,29 +187,34 @@ void cmd_print(int nitems)
 }
 
 /*[15]*/
-void cmd_read(char *filename)
+void cmd_read(char *filename, int new_s)
 {
-  char buffer[MAX_LINE_LEN+1];
+  char buffer[MAX_LINE_LEN + 1];
   int a,b;
   FILE *fp;
+  char s[MAX_LINE_LEN + 1] = "\0";
 
   a = profile_data_nitems;
   fp = fopen(filename, "r");
 
   if(fp == NULL) {
-    fprintf(stderr,"ファイルがありません，ファイル名を確認してください．\n");
+    //fprintf(stderr,"ファイルがありません，ファイル名を確認してください．\n");
+    snprintf(s, MAX_LINE_LEN, "ファイルがありません，ファイル名を確認してください．\n");
+    send(new_s, s, sizeof(s), 0);
     return;
   }
   while(get_line(fp ,buffer))
     {
-      parse_line(buffer);
+      parse_line(buffer, new_s);
     }	
   b = profile_data_nitems;
   fclose(fp);
 
   ditems = b - a;
   back = 1;
-  printf("読み込みが完了しました．%%C等で確認してください．\n");
+  // printf("読み込みが完了しました．%%C等で確認してください．\n");
+  snprintf(s, MAX_LINE_LEN, "読み込みが完了しました．%%C等で確認してください．\n");
+  send(new_s, s, sizeof(s), 0);
 }
 
 /*[16]*/
@@ -220,11 +229,12 @@ void fprint_profile_csv(int i, FILE *fp)
 }
 
 /*[17]*/
-void cmd_write(char *filename)
+void cmd_write(char *filename, int new_s)
 {
   int i;
   FILE *fp;
   char *file = "writefile.csv";
+  char s[MAX_LINE_LEN + 1] = "\0";
 
   if(*filename == 0) fp = fopen(file,"w");
   else fp = fopen(filename, "w");
@@ -237,7 +247,9 @@ void cmd_write(char *filename)
 
   flag = 0;
 
-  printf("書き込みが完了しました．ファイルを確認してください．\n");
+  //printf("書き込みが完了しました．ファイルを確認してください．\n");
+  snprintf(s,MAX_LINE_LEN,"書き込みが完了しました．ファイルを確認してください．\n");
+  send(new_s, s, sizeof(s), 0);
 }
 
 /*[18]*/
@@ -381,7 +393,7 @@ void cmd_add(param)
   printf("CSV形式で名簿データを入力してください．\n");
 
   get_line(stdin,line);
-  parse_line(line);
+  //  parse_line(line); たぶんnew_sもわたす
 
   p = &profile_data_store[profile_data_nitems-1];
 
@@ -397,7 +409,7 @@ void cmd_add(param)
 }
 
 /*[26]*/
-void cmd_back()
+void cmd_back(int new_s)
 {
   int i;
   struct profile *p;
@@ -413,7 +425,7 @@ void cmd_back()
     break;
 
   case 2:
-    cmd_read("backup.txt");
+    cmd_read("backup.txt", new_s);
     p = &profile_data_store[profile_data_nitems-1];
     if(mark == 0){
       for(i=0;i<profile_data_nitems-mark;i++)
@@ -434,8 +446,9 @@ void cmd_back()
 }
 
 /*[27]*/
-void cmd_man()
+void cmd_man(int new_s)
 {
+  /*
   printf("\n");
   printf("このプログラムは標準入力から「ID，氏名，年月日，住所，備考」からなるコンマ区切り形式(CSV形式)の名簿データを受け付けて，それらを名簿中に登録する名簿管理プログラムである．\n");
   printf("下記では，%%で始まる各コマンド入力の仕様を説明している．\n");
@@ -452,26 +465,34 @@ void cmd_man()
   printf("%%B      |直前の状態に戻る(Back)\n");
   printf("%%M      |各コマンドの仕様(Manual)\n");
   printf("\n");
+  */
+
+  //printf("登録件数は%d件です．\n", profile_data_nitems);
+  char s[MAX_LINE_LEN + 1] = {'\0'};
+  snprintf(s, MAX_LINE_LEN, "\nこのプログラムは標準入力から「ID，氏名，年月日，住所，備考」からなるコンマ区切り形式(CSV形式)の名簿データを受け付けて，それらを名簿中に登録する名簿管理プログラムである．\n下記では，%%で始まる各コマンド入力の仕様を説明している．\n\n%%Q      |終了(Quit)\n%%C      |登録件数などの表示(Check)\n%%P n    |先頭からn件表示(Print)\n%%R file |fileから読み込み(Read)\n%%W file |fileへ書き出し(Write)\n%%F word |wordを検索(Find)\n%%S n    |データをn番目の項目で整列(Sort)\n%%D n    |データをn件削除(Delete)\n%%A n    |n番目にデータを登録(Add)\n%%B      |直前の状態に戻る(Back)\n%%M      |各コマンドの仕様(Manual)\n\n");
+  send(new_s, s, sizeof(s), 0);
+
+  
 
 }
 
 /*[28]*/
-void exec_command(char cmd, char *param)
+void exec_command(char cmd, char *param, int new_s) //全てのコマンドにnew_sわたす　いまはcだけ
 {
   switch (cmd) {
   case 'Q': cmd_quit(param); break;
-  case 'C': cmd_check(); break;
+  case 'C': cmd_check(new_s); break;
   case 'P': cmd_print(atoi(param)); break;
-  case 'R': cmd_read(param); break;
-  case 'W': cmd_write(param); break;
+  case 'R': cmd_read(param, new_s); break;
+  case 'W': cmd_write(param, new_s); break;
   case 'F': cmd_find(param); break;
   case 'S': cmd_sort(atoi(param)); break;
   case 'D': cmd_delete(atoi(param)); break;
   case 'A': cmd_add(atoi(param)); break;
-  case 'B': cmd_back(); break;
-  case 'M': cmd_man(); break;
+  case 'B': cmd_back(new_s); break;
+  case 'M': cmd_man(new_s); break;
   default:
-    fprintf(stderr, "%cは登録されていないコマンドです.%%Mなどでコマンドを確認してください．\n",  cmd);
+    fprintf(stderr, "%cは登録されていないコマンドです.%%Mなどでコマンドを確認してください．\n",  cmd); //表示をsendに変えてclientにおくる
     break;
   }
 }
@@ -479,10 +500,10 @@ void exec_command(char cmd, char *param)
 
 
 /*[29]*/
-void parse_line(char *line)
+void parse_line(char *line, int new_s)
 {
   if(line[0] == '%') {
-    exec_command(line[1], &line[3]);
+    exec_command(line[1], &line[3], new_s);
   } else if (new_profile(&profile_data_store[profile_data_nitems], line)!=NULL){
       profile_data_nitems++;
       back = 1;
@@ -492,13 +513,14 @@ void parse_line(char *line)
   }
 }
 
-/*[30]*/
+/*[30]
 int main()
 {
   char line[MAX_LINE_LEN + 1];
   printf("CSV形式でデータを登録，もしくは%%から始まるコマンドを入力してください．\n");
   while (get_line(stdin ,line)) {
-    parse_line(line);
+    //   parse_line(line);
   }
   return 0;
 }
+*/
