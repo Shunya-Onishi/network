@@ -139,7 +139,8 @@ void cmd_quit(char *param, int new_s)
       }
 
   else {
-    snprintf(s, MAX_LINE_LEN,"入力されたデータが保存されていません．\n%%Q a でこのまま終了します．\n");
+    //    snprintf(s, MAX_LINE_LEN,"入力されたデータが保存されていません．\n%%Q a でこのまま終了します．\n");
+    snprintf(s, MAX_LINE_LEN, "終了します。\n");
     send(new_s, s, sizeof(s), 0);
   }
 }
@@ -174,26 +175,31 @@ void print_profile(struct profile *p, int new_s)
 void cmd_print(int nitems, int new_s)
 {
   int i, end = profile_data_nitems;
+  char s[MAX_LINE_LEN +1]={'\0'};
 
   if(nitems == 0){
+    snprintf(s, MAX_LINE_LEN, "%d", end);
+    send(new_s, s, sizeof(s), 0);
     for(i=0;i<end;i++){
       print_profile(&profile_data_store[i], new_s);
-      printf("\n");
+      //     printf("\n");
   }
   }else if(0 < nitems){
     if(nitems > end) nitems = end;
+    snprintf(s, MAX_LINE_LEN, "%d", nitems);
+    send(new_s, s, sizeof(s), 0);
     for(i=0;i<nitems;i++){
       print_profile(&profile_data_store[i], new_s);
-      printf("\n");
+      //     printf("\n");
     }
   }else if(nitems < 0){
     end=end+nitems;
-    if(end< 0) end = 0;
-    snprint nitems
-    send new_s
+    if(end< 0) end = 0;    
+    snprintf(s, MAX_LINE_LEN, "%d", end);
+    send(new_s, s, sizeof(s), 0);
     for(i=end;i < profile_data_nitems;i++){
       print_profile(&profile_data_store[i], new_s);
-      printf("\n");
+      //      printf("\n");
     }
   }
 }
@@ -268,11 +274,12 @@ void cmd_write(char *filename, int new_s)
 void cmd_find(char *word, int new_s)
 {
   int i;
+  int count = 0;
   struct profile *p;
   char id[MAX_ID_LEN+1];
   char date[MAX_BIRTH_LEN+1];
   char s[MAX_LINE_LEN +1] = {'\0'};
-  
+
   for(i=0;i<profile_data_nitems;i++){
     p = &profile_data_store[i];
     sprintf(id, "%d", p->id);
@@ -280,13 +287,29 @@ void cmd_find(char *word, int new_s)
        strcmp(p->name, word) == 0 ||
        strcmp(date_to_string(date, &(p->birthday)), word) == 0 ||
        strcmp(p->home, word) == 0 ||
-       strcmp(p->comment, word) == 0){
-      snprintf(s, MAX_LINE_LEN,"%d\n", i+1);
-      print_profile(p, new_s);
-      snprintf(s, MAX_LINE_LEN,"\n");
+       strcmp(p->comment, word) == 0
+       ){
+      count++;
     }
   }
-  snprintf(s, MAX_LINE_LEN,"検索が完了しました．該当するデータがなかった場合，何も表示されません．\n");
+  snprintf(s, MAX_LINE_LEN, "%d", count);
+  send(new_s, s, sizeof(s), 0);
+
+  for(i=0;i<profile_data_nitems;i++){
+    p = &profile_data_store[i];
+    sprintf(id, "%d", p->id);
+    if(strcmp(id, word) == 0 ||
+       strcmp(p->name, word) == 0 ||
+       strcmp(date_to_string(date, &(p->birthday)), word) == 0 ||
+       strcmp(p->home, word) == 0 ||
+       strcmp(p->comment, word) == 0
+       ){
+      snprintf(s, MAX_LINE_LEN,
+	       "Id    : %d\nName  : %s\nBirth : %s\nAddr  : %s\nCom.  : %s\n", 
+	       p->id, p->name, date_to_string(date, &p->birthday), p->home, p->comment);
+      send(new_s, s, sizeof(s), 0);
+    }
+  }
 }
 
 /*[19]*/
@@ -362,11 +385,11 @@ void ndelete(int nitems)
 }
 
 /*[24]*/
-void cmd_delete(int param)
+void cmd_delete(int param, int new_s)
 {
   int i;
   FILE *fp;
-
+  char s[MAX_LINE_LEN + 1]={'\0'};
   fp = fopen("backup.txt", "w");
   mark = 0;
 
@@ -389,19 +412,22 @@ void cmd_delete(int param)
     ndelete(1);
     mark = param;
   } else {
-    fprintf(stderr,"保存件数は%d件です\n正しい引数を入力してください\n"
+    snprintf(s, MAX_LINE_LEN ,"保存件数は%d件です\n正しい引数を入力してください\n"
 	    ,profile_data_nitems);
+    send(new_s, s, sizeof(s), 0);
     return;
   }
   fclose(fp);
   back = 2;
+  snprintf(s, MAX_LINE_LEN ,"delete ok\n");
+  send(new_s, s, sizeof(s), 0);
 }
 
 /*[25]*/
 void cmd_add(int param, int new_s)
 {
   int i;
-  char line[MAX_LINE_LEN+1];
+  //  char line[MAX_LINE_LEN+1];
   char s[MAX_LINE_LEN +1] = {'\0'};
   struct profile *p;
   mark = -param;
@@ -410,8 +436,11 @@ void cmd_add(int param, int new_s)
     snprintf(s, MAX_LINE_LEN, "CSV形式で名簿データを入力してください．\n");
     send(new_s, s, sizeof(s), 0);
 
-    get_line(stdin,line);
-    parse_line(line, new_s); 
+    //    get_line(stdin,line);
+    bzero(&s, sizeof(s));
+    recv(new_s, s, sizeof(s), 0);
+     parse_line(s, new_s); 
+
 
     p = &profile_data_store[profile_data_nitems-1];
 
@@ -420,23 +449,26 @@ void cmd_add(int param, int new_s)
     }
 
     back = 3;
-    snprintf(s, MAX_LINE_LEN, "登録が完了しました．\n");
-    send(new_s, s, sizeof(s), 0);
+    /* snprintf(s, MAX_LINE_LEN, "登録が完了しました．\n"); */
+    /* send(new_s, s, sizeof(s), 0); */
 
   }else if(param == profile_data_nitems){
 
     snprintf(s, MAX_LINE_LEN, "CSV形式で名簿データを入力してください．\n");
     send(new_s, s, sizeof(s), 0);
 
-    get_line(stdin,line);
-    parse_line(line, new_s); 
+    //   get_line(stdin,line);
+    bzero(&s, sizeof(s));
+    recv(new_s, s, sizeof(s), 0);
+    parse_line(s, new_s); 
+
     p = &profile_data_store[profile_data_nitems-1];
 
     swap(p-1,p);
 
     back = 3;
-    snprintf(s, MAX_LINE_LEN, "登録が完了しました．\n");
-    send(new_s, s, sizeof(s), 0);
+    /* snprintf(s, MAX_LINE_LEN, "登録が完了しました．\n"); */
+    /* send(new_s, s, sizeof(s), 0); */
 
   }else{
     snprintf(s, MAX_LINE_LEN, "登録件数は%d件です．正しい引数を入力してください．\n",profile_data_nitems);
@@ -448,31 +480,37 @@ void cmd_add(int param, int new_s)
 void cmd_back(int new_s)
 {
   int i;
+  char s[MAX_LINE_LEN +1]={'\0'};
   struct profile *p;
 
   switch(back){
 
   case 0:
-    printf("%%Bコマンドは，%%R,%%D,%%Aコマンド実行後しか使用できません．\n"); break;
+    snprintf(s, MAX_LINE_LEN,"%%Bコマンドは，%%R,%%Aコマンド実行後しか使用できません．\n");
+    send(new_s, s,sizeof(s), 0);
+    break;
     
   case 1:
     ndelete(ditems); 
-    printf("%%Rコマンド実行前の状態に戻りました．\n"); 
+    snprintf(s, MAX_LINE_LEN,"%%Rコマンド実行前の状態に戻りました．\n"); 
+    send(new_s, s,sizeof(s), 0);
     break;
 
   case 2:
-    cmd_read("backup.txt", new_s);
-    p = &profile_data_store[profile_data_nitems-1];
-    if(mark == 0){
-      for(i=0;i<profile_data_nitems-mark;i++)
-	swap(p-1-i,p-i);
-    }
-    printf("%%Dコマンド実行前の状態に戻りました．\n");
+    /* cmd_read("backup.txt", new_s); */
+    /* p = &profile_data_store[profile_data_nitems-1]; */
+    /* if(mark == 0){ */
+    /*   for(i=0;i<profile_data_nitems-mark;i++) */
+    /* 	swap(p-1-i,p-i); */
+    /* } */
+    snprintf(s, MAX_LINE_LEN,"%%Dコマンド実行前の状態に戻りました．\n");
+    send(new_s, s,sizeof(s), 0);
     break;
     
   case 3:
-    cmd_delete(mark); 
-    printf("%%Aコマンド実行前の状態に戻りました．\n");
+    cmd_delete(mark, new_s); 
+    // snprintf(s,MAX_LINE_LEN,"%%Aコマンド実行前の状態に戻りました．\n");
+    // send(new_s, s,sizeof(s), 0);
     break;
    
   }
@@ -494,16 +532,16 @@ void exec_command(char cmd, char *param, int new_s) //全てのコマンドにne
 {
   char s[MAX_LINE_LEN + 1] = {'\0'};
   switch (cmd) {
-  case 'Q': cmd_quit(param, new_s); break; //------------------------[10] 
+  case 'Q': cmd_quit(param, new_s); break; //-----------------[10] -aコマンド以外ok
   case 'C': cmd_check(new_s); break; //-----------------------[11] ok
-  case 'P': cmd_print(atoi(param), new_s); break; //----------[14] 1ken ok
+  case 'P': cmd_print(atoi(param), new_s); break; //----------[14] ok
   case 'R': cmd_read(param, new_s); break; //-----------------[15] ok
   case 'W': cmd_write(param, new_s); break; //----------------[17] ok
-  case 'F': cmd_find(param, new_s); break; //-----------------[18] mikakunin
+  case 'F': cmd_find(param, new_s); break; //-----------------[18] ok
   case 'S': cmd_sort(atoi(param), new_s); break; //-----------[22] ok
-  case 'D': cmd_delete(atoi(param)); break; //----------------[24] 
-  case 'A': cmd_add(atoi(param), new_s); break; //------------[25] meibotouroku dame
-  case 'B': cmd_back(new_s); break; //------------------------[26] mada
+  case 'D': cmd_delete(atoi(param), new_s); break; //---------[24] ok 
+  case 'A': cmd_add(atoi(param), new_s); break; //------------[25] ok
+  case 'B': cmd_back(new_s); break; //------------------------[26] case2(D)以外ok
   case 'M': cmd_man(new_s); break; //-------------------------[27] ok
   default:
     snprintf(s, MAX_LINE_LEN, "%cは登録されていないコマンドです. %%Mなどでコマンドを確認してください．\n",  cmd);
@@ -525,7 +563,7 @@ void parse_line(char *line, int new_s)
     profile_data_nitems++;
     back = 1;
     ditems = 1;
-    snprintf(s,MAX_LINE_LEN, "csv ok\n");
+    snprintf(s,MAX_LINE_LEN, "New Data added\n");
     send(new_s, s, sizeof(s), 0);
   }/* else if (new_profile(&profile_data_store[profile_data_nitems], line)!=NULL){
       profile_data_nitems++;

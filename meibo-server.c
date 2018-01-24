@@ -68,12 +68,11 @@ int main(){
   }
 
   /*接続要求を受け付ける*/
-
-  while(1){
+  int new_s;
+    while(1){
 
   struct sockaddr_in client;
   
-  int new_s;
   socklen_t len = sizeof(client);
   new_s = accept(sockfd, (struct sockaddr *)&client, &len);
   if(new_s < 0){
@@ -83,14 +82,26 @@ int main(){
 
   /*メッセージを受信する*/
 
-    //getlineのやつをrecv
-    //受け取りと送信の配列の長さを統一する maxlinelen
-
   while(1){
     char buf[MAX_LINE_LEN + 1];
+    printf("クライアントの入力待ち \n");
     recv(new_s, buf, sizeof(buf), 0);
-    printf("%s\n",buf);
+    printf("入力 %s\n",buf);
+    if(buf[0]=='%' && buf[1]=='Q'){
     parse_line(buf, new_s);
+    printf("処理終了\n\n");
+    break;
+    }else{
+      printf("サーバの処理開始 \n");
+
+      parse_line(buf, new_s);
+
+      printf("入力 after parse_line(): %s\n", buf);
+      bzero(&buf, sizeof(buf));
+      printf("処理終了\n\n");
+    }
+  }
+
 
     /* /\*メッセージの送信*\/ */
     /* memset(buf,0,sizeof(s)); */
@@ -102,7 +113,7 @@ int main(){
 
   close(new_s);
 
-  } dekai while
+  //  } dekai while
 
   return 0;
 

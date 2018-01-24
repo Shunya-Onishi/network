@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
+#include <stdlib.h>
 #include <unistd.h> //close
 #include <fcntl.h>
 
@@ -80,6 +81,7 @@ int main(int argc, char *argv[]){
   /*メッセージを送信する*/
 
   while(1){
+    printf("クライアントの入力待ち\n");
 
     char line[MAX_LINE_LEN + 1];
     get_line(stdin, line);
@@ -92,30 +94,68 @@ int main(int argc, char *argv[]){
     };
 
     /*メッセージを受信する*/
+    char kekka[MAX_LINE_LEN + 1];
+    if((line[0]=='%' && line[1]=='P') || (line[0]=='%' && line[1]=='F')){
+      bzero(&kekka, sizeof(kekka));
+      recv(sockfd, kekka, sizeof(kekka), 0); //回数を受け取る
+      int times;
+      int l;
+      times = atoi(kekka);
+      for(l=0; l<times; l++){
+	bzero(&kekka, sizeof(kekka));
+	recv(sockfd, kekka, sizeof(kekka), 0);
+	printf("%s\n", kekka);
+      }
 
-    // while(1){
-      char kekka[MAX_LINE_LEN + 1];
-      if(recv(sockfd, kekka, sizeof(kekka), 0) < 0){
-	printf("Error : can't recv\n");
-	return(-1);
-      };
+    }else if(line[0]=='%' && line[1]=='A'){
+	bzero(&kekka, sizeof(kekka));
+	recv(sockfd, kekka, sizeof(kekka), 0);
+	printf("%s\n", kekka);
 
+	bzero(&kekka, sizeof(kekka));
+	get_line(stdin,kekka);
+	send(sockfd, kekka, sizeof(kekka), 0);
+
+	bzero(&kekka, sizeof(kekka));
+	recv(sockfd, kekka, sizeof(kekka), 0);
+	printf("%s\n", kekka);
+
+
+    }else if(line[0]=='%' && line[1]=='B'){
+      	bzero(&kekka, sizeof(kekka));
+	recv(sockfd, kekka, sizeof(kekka), 0);
+	//	printf("%s\n", kekka);
+	printf("Undo!\n");
+
+    }else if(line[0]=='%'){
+      bzero(&kekka, sizeof(kekka));
+      recv(sockfd, kekka, sizeof(kekka), 0);
       printf("%s\n", kekka);
+      if(line[1]=='Q'){
+	//	  exit(0);
+	return 0;
+      }
+    }else{
+      bzero(&kekka, sizeof(kekka));
+      recv(sockfd, kekka, sizeof(kekka), 0);
+      printf("%s\n", kekka);
+    }
+    bzero(&line, sizeof(line));
+    /* // while(1){ */
+    /*   char kekka[MAX_LINE_LEN + 1]; */
+    /*   if(recv(sockfd, kekka, sizeof(kekka), 0) < 0){ */
+    /* 	printf("Error : can't recv\n"); */
+    /* 	return(-1); */
+    /*   }; */
 
-    /*   if(strlen(kekka)==0) break; */
-    /* } */
+    /*   printf("%s\n", kekka); */
 
   }
 
   /*ソケットを削除する*/
-
   if(close(sockfd) < 0){
     printf("Error : can't close\n");
     return(-1);
-  };
-
-
-
+  }
   return 0;
-
 }

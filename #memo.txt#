@@ -1,0 +1,71 @@
+/*[15]*/
+void cmd_read(char *filename, int new_s)
+{
+  char buffer[MAX_LINE_LEN + 1];
+  int a,b;
+  FILE *fp;
+  char s[MAX_LINE_LEN + 1] = "\0";
+
+  a = profile_data_nitems;
+  fp = fopen(filename, "r");
+
+  if(fp == NULL) {
+    snprintf(s, MAX_LINE_LEN, "ファイルがありません，ファイル名を確認してください．\n");
+    send(new_s, s, sizeof(s), 0);
+    return;
+  }
+  while(get_line(fp ,buffer))
+    {
+    new_profile(&profile_data_store[profile_data_nitems], buffer);
+    profile_data_nitems++;
+    back = 1;
+    ditems = 1;
+    }	
+  b = profile_data_nitems;
+  fclose(fp);
+
+  ditems = b - a;
+  back = 1;
+  snprintf(s, MAX_LINE_LEN, "読み込みが完了しました．%%C等で確認してください．\n");
+  send(new_s, s, sizeof(s), 0);
+}
+
+
+/*[24]*/
+void cmd_delete(int param, int new_s)
+{
+  int i;
+  FILE *fp;
+  char s[MAX_LINE_LEN + 1]={'\0'};
+  fp = fopen("backup.txt", "w");
+  mark = 0;
+
+  if(param == 0){
+    fprint_profile_csv(profile_data_nitems-1,fp);
+    ndelete(1);
+  }
+  else if(param > 0 && param< profile_data_nitems + 1){
+    for(i=0;i<param;i++)
+      fprint_profile_csv(profile_data_nitems-param+i,fp);
+    ndelete(param);
+  }
+  else if(param < 0 && -profile_data_nitems -1 <  param){
+    param = -param;
+    fprint_profile_csv(param-1,fp);
+    for(i=0;i<(profile_data_nitems -param);i++){
+      swap(&profile_data_store[param-1+i]
+	   ,&profile_data_store[param+i]);
+    }
+    ndelete(1);
+    mark = param;
+  } else {
+    snprintf(s, MAX_LINE_LEN ,"保存件数は%d件です\n正しい引数を入力してください\n"
+	    ,profile_data_nitems);
+    send(new_s, s, sizeof(s), 0);
+    return;
+  }
+  fclose(fp);
+  back = 2;
+  snprintf(s, MAX_LINE_LEN ,"delete ok\n");
+  send(new_s, s, sizeof(s), 0);
+}
