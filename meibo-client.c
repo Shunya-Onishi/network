@@ -79,27 +79,33 @@ int main(int argc, char *argv[]){
 
   /*メッセージを送信する*/
 
-  char line[MAX_LINE_LEN + 1];
-  //get_line(line);
-  get_line(stdin, line);
-  //send();
-  int check;
-  check = send(sockfd, line, sizeof(line), 0);
+  while(1){
 
-  if(check < 0){
-    printf("Error : can't send\n");
-    return(-1);
-  };
+    char line[MAX_LINE_LEN + 1];
+    get_line(stdin, line);
+    int check;
+    check = send(sockfd, line, sizeof(line), 0);
 
-  /*メッセージを受信する*/
+    if(check < 0){
+      printf("Error : can't send\n");
+      return(-1);
+    };
 
-  char kekka[MAX_LINE_LEN + 1];
-  if(recv(sockfd, kekka, sizeof(kekka), 0) < 0){
-    printf("Error : can't recv\n");
-    return(-1);
-  };
+    /*メッセージを受信する*/
 
-  printf("%s\n", kekka);
+    // while(1){
+      char kekka[MAX_LINE_LEN + 1];
+      if(recv(sockfd, kekka, sizeof(kekka), 0) < 0){
+	printf("Error : can't recv\n");
+	return(-1);
+      };
+
+      printf("%s\n", kekka);
+
+    /*   if(strlen(kekka)==0) break; */
+    /* } */
+
+  }
 
   /*ソケットを削除する*/
 
@@ -107,6 +113,8 @@ int main(int argc, char *argv[]){
     printf("Error : can't close\n");
     return(-1);
   };
+
+
 
   return 0;
 

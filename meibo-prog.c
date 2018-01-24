@@ -124,13 +124,23 @@ struct profile *new_profile(struct profile *p, char *csv){
 }
 
 /*[10]*/
-void cmd_quit(char *param)
+void cmd_quit(char *param, int new_s)
 {
-  if(flag==0) exit(0);
-  if(*param == 'a') exit(0);
+  char s[MAX_LINE_LEN + 1]={'\0'};
+  if(flag==0){
+    snprintf(s, MAX_LINE_LEN, "終了します。\n");
+    send(new_s, s, sizeof(s), 0);
+    // exit(0);
+      }
+  if(*param == 'a'){
+    snprintf(s, MAX_LINE_LEN, "終了します。\n");
+    send(new_s, s, sizeof(s), 0);
+    // exit(0);
+      }
+
   else {
-  printf("入力されたデータが保存されていません．\n");
-  printf("%%Q a でこのまま終了します．\n");
+    snprintf(s, MAX_LINE_LEN,"入力されたデータが保存されていません．\n%%Q a でこのまま終了します．\n");
+    send(new_s, s, sizeof(s), 0);
   }
 }
 /*[11]*/
@@ -138,7 +148,7 @@ void cmd_check(int new_s)
 {
   //printf("登録件数は%d件です．\n", profile_data_nitems);
   char s[MAX_LINE_LEN + 1] = {'\0'};
-  snprintf(s, MAX_LINE_LEN, "登録件数は%d件です．", profile_data_nitems);
+  snprintf(s, MAX_LINE_LEN, "登録件数は%d件です．\n", profile_data_nitems);
   send(new_s, s, sizeof(s), 0);
 }
 /*[12]*/
@@ -149,38 +159,40 @@ char *date_to_string(char buf[], struct date *date)
 }
 
 /*[13]*/
-void print_profile(struct profile *p)
+void print_profile(struct profile *p, int new_s)
 {
   char date[11];
+  char s[MAX_LINE_LEN+1] = {'\0'};
 
-  printf("Id    : %d\n", p->id);
-  printf("Name  : %s\n", p->name);
-  printf("Birth : %s\n", date_to_string(date, &p->birthday));
-  printf("Addr  : %s\n", p->home);
-  printf("Com.  : %s\n", p->comment);
+  snprintf(s, MAX_LINE_LEN,"Id    : %d\nName  : %s\nBirth : %s\nAddr  : %s\nCom.  : %s\n", 
+	   p->id, p->name, date_to_string(date, &p->birthday), p->home, p->comment);
+  send(new_s, s, sizeof(s), 0);
+
 }
 
 /*[14]*/
-void cmd_print(int nitems)
+void cmd_print(int nitems, int new_s)
 {
   int i, end = profile_data_nitems;
 
   if(nitems == 0){
     for(i=0;i<end;i++){
-      print_profile(&profile_data_store[i]);
+      print_profile(&profile_data_store[i], new_s);
       printf("\n");
   }
   }else if(0 < nitems){
     if(nitems > end) nitems = end;
     for(i=0;i<nitems;i++){
-      print_profile(&profile_data_store[i]);
+      print_profile(&profile_data_store[i], new_s);
       printf("\n");
     }
   }else if(nitems < 0){
     end=end+nitems;
     if(end< 0) end = 0;
+    snprint nitems
+    send new_s
     for(i=end;i < profile_data_nitems;i++){
-      print_profile(&profile_data_store[i]);
+      print_profile(&profile_data_store[i], new_s);
       printf("\n");
     }
   }
@@ -198,21 +210,22 @@ void cmd_read(char *filename, int new_s)
   fp = fopen(filename, "r");
 
   if(fp == NULL) {
-    //fprintf(stderr,"ファイルがありません，ファイル名を確認してください．\n");
     snprintf(s, MAX_LINE_LEN, "ファイルがありません，ファイル名を確認してください．\n");
     send(new_s, s, sizeof(s), 0);
     return;
   }
   while(get_line(fp ,buffer))
     {
-      parse_line(buffer, new_s);
+    new_profile(&profile_data_store[profile_data_nitems], buffer);
+    profile_data_nitems++;
+    back = 1;
+    ditems = 1;
     }	
   b = profile_data_nitems;
   fclose(fp);
 
   ditems = b - a;
   back = 1;
-  // printf("読み込みが完了しました．%%C等で確認してください．\n");
   snprintf(s, MAX_LINE_LEN, "読み込みが完了しました．%%C等で確認してください．\n");
   send(new_s, s, sizeof(s), 0);
 }
@@ -247,18 +260,18 @@ void cmd_write(char *filename, int new_s)
 
   flag = 0;
 
-  //printf("書き込みが完了しました．ファイルを確認してください．\n");
   snprintf(s,MAX_LINE_LEN,"書き込みが完了しました．ファイルを確認してください．\n");
   send(new_s, s, sizeof(s), 0);
 }
 
 /*[18]*/
-void cmd_find(char *word)
+void cmd_find(char *word, int new_s)
 {
   int i;
   struct profile *p;
   char id[MAX_ID_LEN+1];
   char date[MAX_BIRTH_LEN+1];
+  char s[MAX_LINE_LEN +1] = {'\0'};
   
   for(i=0;i<profile_data_nitems;i++){
     p = &profile_data_store[i];
@@ -268,12 +281,12 @@ void cmd_find(char *word)
        strcmp(date_to_string(date, &(p->birthday)), word) == 0 ||
        strcmp(p->home, word) == 0 ||
        strcmp(p->comment, word) == 0){
-      printf("%d\n", i+1);
-      print_profile(p);
-      printf("\n");
+      snprintf(s, MAX_LINE_LEN,"%d\n", i+1);
+      print_profile(p, new_s);
+      snprintf(s, MAX_LINE_LEN,"\n");
     }
   }
-  printf("検索が完了しました．該当するデータがなかった場合，何も表示されません．\n");
+  snprintf(s, MAX_LINE_LEN,"検索が完了しました．該当するデータがなかった場合，何も表示されません．\n");
 }
 
 /*[19]*/
@@ -314,9 +327,10 @@ int profile_compare(struct profile *p1, struct profile *p2, int column)
 
 
 /*[22]*/
-void cmd_sort(int param)
+void cmd_sort(int param, int new_s)
 {
   int i, j;
+  char s[MAX_LINE_LEN + 1] = {'\0'};
   struct profile *p;
 
   if(0< param && param <6){
@@ -329,9 +343,11 @@ void cmd_sort(int param)
     }
   }
   back = 0;
-  printf("ソートが完了しました．%%Pなどで確認してください．\n");
+  snprintf(s, MAX_LINE_LEN, "ソートが完了しました．%%Pなどで確認してください．\n");
+  send(new_s, s, sizeof(s), 0);
   }else{
-    printf("有効な引数は1~5です．正しい引数を入力してください．\n");
+    snprintf(s, MAX_LINE_LEN, "有効な引数は1~5です．正しい引数を入力してください．\n");
+    send(new_s, s, sizeof(s), 0);
   }
 }
 
@@ -382,29 +398,49 @@ void cmd_delete(int param)
 }
 
 /*[25]*/
-void cmd_add(param)
+void cmd_add(int param, int new_s)
 {
   int i;
   char line[MAX_LINE_LEN+1];
+  char s[MAX_LINE_LEN +1] = {'\0'};
   struct profile *p;
   mark = -param;
 
   if(0 < param && param< profile_data_nitems){
-  printf("CSV形式で名簿データを入力してください．\n");
+    snprintf(s, MAX_LINE_LEN, "CSV形式で名簿データを入力してください．\n");
+    send(new_s, s, sizeof(s), 0);
 
-  get_line(stdin,line);
-  //  parse_line(line); たぶんnew_sもわたす
+    get_line(stdin,line);
+    parse_line(line, new_s); 
 
-  p = &profile_data_store[profile_data_nitems-1];
+    p = &profile_data_store[profile_data_nitems-1];
 
-  for(i=0;i<(profile_data_nitems - param); i++){
-    swap(p-i-1,p-i);
-  }
+    for(i=0;i<(profile_data_nitems - param); i++){
+      swap(p-i-1,p-i);
+    }
 
-  back = 3;
-  printf("登録が完了しました．\n");
+    back = 3;
+    snprintf(s, MAX_LINE_LEN, "登録が完了しました．\n");
+    send(new_s, s, sizeof(s), 0);
+
+  }else if(param == profile_data_nitems){
+
+    snprintf(s, MAX_LINE_LEN, "CSV形式で名簿データを入力してください．\n");
+    send(new_s, s, sizeof(s), 0);
+
+    get_line(stdin,line);
+    parse_line(line, new_s); 
+    p = &profile_data_store[profile_data_nitems-1];
+
+    swap(p-1,p);
+
+    back = 3;
+    snprintf(s, MAX_LINE_LEN, "登録が完了しました．\n");
+    send(new_s, s, sizeof(s), 0);
+
   }else{
-    printf("登録件数は%d件です．正しい引数を入力してください．\n",profile_data_nitems);
+    snprintf(s, MAX_LINE_LEN, "登録件数は%d件です．正しい引数を入力してください．\n",profile_data_nitems);
+    send(new_s, s, sizeof(s), 0);
   }
 }
 
@@ -448,51 +484,30 @@ void cmd_back(int new_s)
 /*[27]*/
 void cmd_man(int new_s)
 {
-  /*
-  printf("\n");
-  printf("このプログラムは標準入力から「ID，氏名，年月日，住所，備考」からなるコンマ区切り形式(CSV形式)の名簿データを受け付けて，それらを名簿中に登録する名簿管理プログラムである．\n");
-  printf("下記では，%%で始まる各コマンド入力の仕様を説明している．\n");
-  printf("\n");
-  printf("%%Q      |終了(Quit)\n");
-  printf("%%C      |登録件数などの表示(Check)\n");
-  printf("%%P n    |先頭からn件表示(Print)\n");
-  printf("%%R file |fileから読み込み(Read)\n");
-  printf("%%W file |fileへ書き出し(Write)\n");
-  printf("%%F word |wordを検索(Find)\n");
-  printf("%%S n    |データをn番目の項目で整列(Sort)\n");
-  printf("%%D n    |データをn件削除(Delete)\n");
-  printf("%%A n    |n番目にデータを登録(Add)\n");
-  printf("%%B      |直前の状態に戻る(Back)\n");
-  printf("%%M      |各コマンドの仕様(Manual)\n");
-  printf("\n");
-  */
-
-  //printf("登録件数は%d件です．\n", profile_data_nitems);
   char s[MAX_LINE_LEN + 1] = {'\0'};
   snprintf(s, MAX_LINE_LEN, "\nこのプログラムは標準入力から「ID，氏名，年月日，住所，備考」からなるコンマ区切り形式(CSV形式)の名簿データを受け付けて，それらを名簿中に登録する名簿管理プログラムである．\n下記では，%%で始まる各コマンド入力の仕様を説明している．\n\n%%Q      |終了(Quit)\n%%C      |登録件数などの表示(Check)\n%%P n    |先頭からn件表示(Print)\n%%R file |fileから読み込み(Read)\n%%W file |fileへ書き出し(Write)\n%%F word |wordを検索(Find)\n%%S n    |データをn番目の項目で整列(Sort)\n%%D n    |データをn件削除(Delete)\n%%A n    |n番目にデータを登録(Add)\n%%B      |直前の状態に戻る(Back)\n%%M      |各コマンドの仕様(Manual)\n\n");
   send(new_s, s, sizeof(s), 0);
-
-  
-
 }
 
 /*[28]*/
 void exec_command(char cmd, char *param, int new_s) //全てのコマンドにnew_sわたす　いまはcだけ
 {
+  char s[MAX_LINE_LEN + 1] = {'\0'};
   switch (cmd) {
-  case 'Q': cmd_quit(param); break;
-  case 'C': cmd_check(new_s); break;
-  case 'P': cmd_print(atoi(param)); break;
-  case 'R': cmd_read(param, new_s); break;
-  case 'W': cmd_write(param, new_s); break;
-  case 'F': cmd_find(param); break;
-  case 'S': cmd_sort(atoi(param)); break;
-  case 'D': cmd_delete(atoi(param)); break;
-  case 'A': cmd_add(atoi(param)); break;
-  case 'B': cmd_back(new_s); break;
-  case 'M': cmd_man(new_s); break;
+  case 'Q': cmd_quit(param, new_s); break; //------------------------[10] 
+  case 'C': cmd_check(new_s); break; //-----------------------[11] ok
+  case 'P': cmd_print(atoi(param), new_s); break; //----------[14] 1ken ok
+  case 'R': cmd_read(param, new_s); break; //-----------------[15] ok
+  case 'W': cmd_write(param, new_s); break; //----------------[17] ok
+  case 'F': cmd_find(param, new_s); break; //-----------------[18] mikakunin
+  case 'S': cmd_sort(atoi(param), new_s); break; //-----------[22] ok
+  case 'D': cmd_delete(atoi(param)); break; //----------------[24] 
+  case 'A': cmd_add(atoi(param), new_s); break; //------------[25] meibotouroku dame
+  case 'B': cmd_back(new_s); break; //------------------------[26] mada
+  case 'M': cmd_man(new_s); break; //-------------------------[27] ok
   default:
-    fprintf(stderr, "%cは登録されていないコマンドです.%%Mなどでコマンドを確認してください．\n",  cmd); //表示をsendに変えてclientにおくる
+    snprintf(s, MAX_LINE_LEN, "%cは登録されていないコマンドです. %%Mなどでコマンドを確認してください．\n",  cmd);
+    send(new_s, s, sizeof(s), 0);
     break;
   }
 }
@@ -502,15 +517,25 @@ void exec_command(char cmd, char *param, int new_s) //全てのコマンドにne
 /*[29]*/
 void parse_line(char *line, int new_s)
 {
+  char s[MAX_LINE_LEN +1] = {'\0'};
   if(line[0] == '%') {
     exec_command(line[1], &line[3], new_s);
-  } else if (new_profile(&profile_data_store[profile_data_nitems], line)!=NULL){
+  } else {
+    new_profile(&profile_data_store[profile_data_nitems], line);
+    profile_data_nitems++;
+    back = 1;
+    ditems = 1;
+    snprintf(s,MAX_LINE_LEN, "csv ok\n");
+    send(new_s, s, sizeof(s), 0);
+  }/* else if (new_profile(&profile_data_store[profile_data_nitems], line)!=NULL){
       profile_data_nitems++;
       back = 1;
       ditems = 1;
-  } else {
-    fprintf(stderr,"入力形式が違います．\n");
-  }
+      
+      send(new_s, s, sizeof(s), 0);
+      } else {
+      fprintf(stderr,"入力形式が違います．\n");
+      }*/
 }
 
 /*[30]

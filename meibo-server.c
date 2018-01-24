@@ -11,6 +11,7 @@
 #include <strings.h>
 #include <unistd.h> //close
 #include <fcntl.h>
+#include <errno.h>
 
 #define PORT_NO 10016
 #define MAX_LINE_LEN 1024
@@ -22,10 +23,20 @@ int main(){
   /*ソケットを作成する*/
 
   int sockfd;
+  int yes = 1;
   sockfd = socket(AF_INET, SOCK_STREAM, 0);
   if(sockfd < 0){
     printf("Error : can't make socket\n");
     return(-1);
+  }
+
+  /* SO_REUSEADDR をつける*/
+
+  int ret;
+  ret = setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR,(const char *)&yes, sizeof(yes));
+  if(ret < 0){
+    printf("Error : can't opt");
+    return 0;
   }
 
   /*ソケットに名前をつける*/
@@ -41,6 +52,7 @@ int main(){
   int name;
   name = bind(sockfd, (struct sockaddr *)&reader_addr, sizeof(reader_addr));
   if(name < 0){
+    perror("bind");
     printf("Error : bind\n");
     return(-1);
   }
@@ -57,6 +69,8 @@ int main(){
 
   /*接続要求を受け付ける*/
 
+  while(1){
+
   struct sockaddr_in client;
   
   int new_s;
@@ -69,23 +83,26 @@ int main(){
 
   /*メッセージを受信する*/
 
-  //getlineのやつをrecv
-  //受け取りと送信の配列の長さを統一する maxlinelen
+    //getlineのやつをrecv
+    //受け取りと送信の配列の長さを統一する maxlinelen
 
-  char buf[MAX_LINE_LEN + 1];
-  recv(new_s, buf, sizeof(buf), 0);
+  while(1){
+    char buf[MAX_LINE_LEN + 1];
+    recv(new_s, buf, sizeof(buf), 0);
+    printf("%s\n",buf);
+    parse_line(buf, new_s);
 
-  parse_line(buf, new_s);
+    /* /\*メッセージの送信*\/ */
+    /* memset(buf,0,sizeof(s)); */
+    /* send(new_s, buf, sizeof(buf), 0); */
 
-  //iran  printf("%s\n", buf);
-
-  /*メッセージの送信*/
-
-  //  send(new_s, ItoC, sizeof(ItoC), 0);
+  }
 
   /*ソケットの削除*/
 
   close(new_s);
+
+  } dekai while
 
   return 0;
 
