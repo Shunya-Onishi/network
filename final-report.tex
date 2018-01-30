@@ -209,7 +209,7 @@ oonishishunya-no-MacBook-Air:network oonishishunya$ ./meibomac-server
 
 \subsection{工夫した点}
 \subsubsection{ソケットの再送待機状態対策}
-ソケットの特性上，一度ソケットをクローズすると，最初にクローズした側（今回の場合はクライアント側）は，再送待機状態(TIME\_WAIT)になる．この状態では，プログラム動作外で到着したパケットを破棄できるよう，数分間はCLOSED状態にならないので，他のソケットがそにポートを使用することができない．
+ソケットの特性上，一度ソケットをクローズすると，最初にクローズした側（今回の場合はクライアント側）は，再送待機状態(TIME\_WAIT)になる．この状態では，プログラム動作外で到着したパケットを破棄できるよう，数分間はCLOSED状態にならないので，他のソケットがそのポートを使用することができない．
 対策法としては，最も単純なのがプログラムを起動するたびに使用するポートを変えるなどが考えられるが，今回は作成したソケットにSO\_REUSEADDRオプションを付加することで問題を解決した．
 
 SO\_REUSEADDRオプションを付加することで，同じローカルアドレスにbindを行ってもエラーにならず処理を行うことができる．
@@ -223,7 +223,7 @@ SO\_REUSEADDRオプションを付加することで，同じローカルアド�
     printf("Error : can't opt");
     return 0;
   }
-  \end{verbatim}
+\end{verbatim}
 
 \subsection{作成に苦労した点}
 
@@ -248,13 +248,12 @@ SO\_REUSEADDRオプションを付加することで，同じローカルアド�
       }
 \end{verbatim}
 
-
 \section{得られた結果に関する考察}
 \subsection{recvとsendの対応付けに関する問題}
 今回の実験は，クライアントサーバモデルを構成して以前作成したプログラムを動かすというものだったので，実際の名簿管理プログラムの速度的な性能や機能面などの考察はテーマに沿わないため，6章の作成過程に関する考察が中心となった．ここでは，プロセス間通信で想定外の動作を防ぐため特に注意し，実装に手間取ったrecvとsendの対応付けに関する問題について考察する．
 
 自作の名簿管理プログラムのコマンドの中で，recvとsendの対応付けが一対一対応にならないものは，
-\%P，\%F，\%A，\%Bの４つであった．
+\%P，\%F，\%A，\%Bの4つであった．
 
 \%Pや\%Fの場合，問題になるのはプリント回数のみであるので，前述の考察で実装したように，プリント回数とプリント処理部をわけて通信を行うといった対応が可能だったが，\%Aや\%Bなど自作で機能拡張したコマンドなどはその関数の実装法などが一般的ではない場合もあるため，今回はクライアント側ですべて場合分けをしてコマンドごとにrecvとsendの回数を合わせにいったが，現実的ではないことがわかる．
 
@@ -271,10 +270,887 @@ SO\_REUSEADDRオプションを付加することで，同じローカルアド�
 \url{https://github.com/Shunya-Onishi/network}
 
 \begin{itemize}
-\item 名簿管理プログラム本体:meibo-prog.c
-\item 名簿管理プログラムクライアント:meibo-client.c
-\item 名簿管理プログラムサーバ:meibo-server.c
+\item 名簿管理プログラム本体:meibo-prog.c p8-
+\item 名簿管理プログラムクライアント:meibo-client.c p22-
+\item 名簿管理プログラムサーバ:meibo-server.c p26-
 \end{itemize}
+
+\newpage
+
+\subsection{追記:ソースコード}
+\subsubsection{meibo-prog.c}
+\begin{verbatim}
+     1	/*[1]*/
+     2	#include <stdio.h>
+     3	#include <stdlib.h>
+     4	#include <string.h>
+     5	#include <sys/types.h>
+     6	#include <sys/socket.h>
+     7	
+     8	
+     9	#define MAX_LINE_LEN 1024
+    10	#define MAXSTR 69
+    11	#define MAXPRO 10000
+    12	#define MAX_ID_LEN 31
+    13	#define MAX_BIRTH_LEN 10
+    14	
+    15	
+    16	int back = 0;
+    17	int ditems;
+    18	int mark = 0;
+    19	int flag =0;
+    20	
+    21	/*[2]*/
+    22	struct date {
+    23	  int y;
+    24	  int m;
+    25	  int d;
+    26	};
+    27	
+    28	/*[3]*/
+    29	struct profile {
+    30	  int id;
+    31	  char name[MAXSTR+1];
+    32	  struct date birthday;
+    33	  char home[MAXSTR+1];
+    34	  char *comment;
+    35	};
+    36	
+    37	/*[4]*/
+    38	struct profile profile_data_store[MAXPRO];
+    39	int profile_data_nitems = 0; 
+    40	
+    41	void parse_line(char *line, int new_s);
+    42	
+    43	/*[5]*/
+    44	int subst(char *str, char c1, char c2)
+    45	{
+    46	  int n = 0;
+    47	
+    48	  while (*str) {
+    49	    if (*str == c1) {
+    50	      *str = c2;
+    51	      n++;
+    52	    }
+    53	    str++;
+    54	  }
+    55	  return n;
+    56	}
+    57	
+    58	/*[6]*/
+    59	int split(char *str, char *ret[], char sep, int max)
+    60	{
+    61	  int cnt = 0;
+    62	
+    63	  ret[cnt++] = str;
+    64	
+    65	  while (*str && cnt < max) {
+    66	    if (*str == sep){
+    67	      *str = '\0';
+    68	      ret[cnt++] = str + 1;
+    69	    }
+    70	    str++;
+    71	  }
+    72	 return cnt;
+    73	}
+    74	
+    75	/*[7]*/
+    76	int get_line(FILE *fp,char *line)
+    77	{
+    78	  if (fgets(line, MAX_LINE_LEN + 1, fp) == NULL)
+    79	    return 0;
+    80	
+    81	  subst(line, '\n','\0');
+    82	
+    83	  return 1;
+    84	}
+    85	
+    86	/*[8]*/
+    87	struct date *new_date(struct date *d, char *str)
+    88	{
+    89	  char *ptr[3];
+    90	
+    91	  if (split(str, ptr, '-', 3) != 3)
+    92	    return NULL;
+    93	
+    94	  d->y = atoi(ptr[0]);
+    95	  d->m = atoi(ptr[1]);
+    96	  d->d = atoi(ptr[2]);
+    97	
+    98	  return d;
+    99	}
+   100	
+   101	/*[9]*/
+   102	struct profile *new_profile(struct profile *p, char *csv){
+   103	  char *ptr[5];
+   104	
+   105	  if (split(csv, ptr, ',', 5) != 5)
+   106	    return NULL;
+   107	
+   108	  p->id = atoi(ptr[0]); 
+   109	
+   110	  strncpy(p->name, ptr[1], MAXSTR);
+   111	  p->name[MAXSTR] = '\0';
+   112	
+   113	  if (new_date(&p->birthday, ptr[2]) == 0)
+   114	    return 0;
+   115	
+   116	  strncpy(p->home, ptr[3], MAXSTR);
+   117	  p->home[MAXSTR] = '\0';
+   118	
+   119	  p->comment = (char *)malloc(sizeof(char) * (strlen(ptr[4]) +1));
+   120	  strcpy(p->comment, ptr[4]);
+   121	
+   122	  flag = 1;
+   123	  return p;
+   124	}
+   125	
+   126	/*[10]*/
+   127	void cmd_quit(char *param, int new_s)
+   128	{
+   129	  char s[MAX_LINE_LEN + 1]={'\0'};
+   130	  if(flag==0){
+   131	    snprintf(s, MAX_LINE_LEN, "終了します。\n");
+   132	    send(new_s, s, sizeof(s), 0);
+   133	    // exit(0);
+   134	      }
+   135	  if(*param == 'a'){
+   136	    snprintf(s, MAX_LINE_LEN, "終了します。\n");
+   137	    send(new_s, s, sizeof(s), 0);
+   138	    // exit(0);
+   139	      }
+   140	
+   141	  else {
+   142	    //    snprintf(s, MAX_LINE_LEN,"入力されたデータが保存されていません．\n%%Q a でこのまま終了します．\n");
+   143	    snprintf(s, MAX_LINE_LEN, "終了します。\n");
+   144	    send(new_s, s, sizeof(s), 0);
+   145	  }
+   146	}
+   147	/*[11]*/
+   148	void cmd_check(int new_s)
+   149	{
+   150	  //printf("登録件数は%d件です．\n", profile_data_nitems);
+   151	  char s[MAX_LINE_LEN + 1] = {'\0'};
+   152	  snprintf(s, MAX_LINE_LEN, "登録件数は%d件です．\n", profile_data_nitems);
+   153	  send(new_s, s, sizeof(s), 0);
+   154	}
+   155	/*[12]*/
+   156	char *date_to_string(char buf[], struct date *date)
+   157	{
+   158	  sprintf(buf, "%04d-%02d-%02d", date->y, date->m, date->d); /*文字列の中に入れる*/
+   159	  return buf;
+   160	}
+   161	
+   162	/*[13]*/
+   163	void print_profile(struct profile *p, int new_s)
+   164	{
+   165	  char date[11];
+   166	  char s[MAX_LINE_LEN+1] = {'\0'};
+   167	
+   168	  snprintf(s, MAX_LINE_LEN,"Id    : %d\nName  : %s\nBirth : %s\nAddr  : %s\nCom.  : %s\n", 
+   169		   p->id, p->name, date_to_string(date, &p->birthday), p->home, p->comment);
+   170	  send(new_s, s, sizeof(s), 0);
+   171	
+   172	}
+   173	
+   174	/*[14]*/
+   175	void cmd_print(int nitems, int new_s)
+   176	{
+   177	  int i, end = profile_data_nitems;
+   178	  char s[MAX_LINE_LEN +1]={'\0'};
+   179	
+   180	  if(nitems == 0){
+   181	    snprintf(s, MAX_LINE_LEN, "%d", end);
+   182	    send(new_s, s, sizeof(s), 0);
+   183	    for(i=0;i<end;i++){
+   184	      print_profile(&profile_data_store[i], new_s);
+   185	      //     printf("\n");
+   186	  }
+   187	  }else if(0 < nitems){
+   188	    if(nitems > end) nitems = end;
+   189	    snprintf(s, MAX_LINE_LEN, "%d", nitems);
+   190	    send(new_s, s, sizeof(s), 0);
+   191	    for(i=0;i<nitems;i++){
+   192	      print_profile(&profile_data_store[i], new_s);
+   193	      //     printf("\n");
+   194	    }
+   195	  }else if(nitems < 0){
+   196	    end=end+nitems;
+   197	    if(end< 0) end = 0;    
+   198	    snprintf(s, MAX_LINE_LEN, "%d", end);
+   199	    send(new_s, s, sizeof(s), 0);
+   200	    for(i=end;i < profile_data_nitems;i++){
+   201	      print_profile(&profile_data_store[i], new_s);
+   202	      //      printf("\n");
+   203	    }
+   204	  }
+   205	}
+   206	
+   207	/*[15]*/
+   208	void cmd_read(char *filename, int new_s)
+   209	{
+   210	  char buffer[MAX_LINE_LEN + 1];
+   211	  int a,b;
+   212	  FILE *fp;
+   213	  char s[MAX_LINE_LEN + 1] = "\0";
+   214	
+   215	  a = profile_data_nitems;
+   216	  fp = fopen(filename, "r");
+   217	
+   218	  if(fp == NULL) {
+   219	    snprintf(s, MAX_LINE_LEN, "ファイルがありません，ファイル名を確認してください．\n");
+   220	    send(new_s, s, sizeof(s), 0);
+   221	    return;
+   222	  }
+   223	  while(get_line(fp ,buffer))
+   224	    {
+   225	    new_profile(&profile_data_store[profile_data_nitems], buffer);
+   226	    profile_data_nitems++;
+   227	    back = 1;
+   228	    ditems = 1;
+   229	    }	
+   230	  b = profile_data_nitems;
+   231	  fclose(fp);
+   232	
+   233	  ditems = b - a;
+   234	  back = 1;
+   235	  snprintf(s, MAX_LINE_LEN, "読み込みが完了しました．%%C等で確認してください．\n");
+   236	  send(new_s, s, sizeof(s), 0);
+   237	}
+   238	
+   239	/*[16]*/
+   240	void fprint_profile_csv(int i, FILE *fp)
+   241	{
+   242	  fprintf(fp,"%d,", profile_data_store[i].id);
+   243	  fprintf(fp,"%s,", profile_data_store[i].name);
+   244	  fprintf(fp,"%04d-%02d-%02d,", profile_data_store[i].birthday.y
+   245		  ,profile_data_store[i].birthday.m, profile_data_store[i].birthday.d);
+   246	  fprintf(fp,"%s,", profile_data_store[i].home);
+   247	  fprintf(fp,"%s\n", profile_data_store[i].comment);
+   248	}
+   249	
+   250	/*[17]*/
+   251	void cmd_write(char *filename, int new_s)
+   252	{
+   253	  int i;
+   254	  FILE *fp;
+   255	  char *file = "writefile.csv";
+   256	  char s[MAX_LINE_LEN + 1] = "\0";
+   257	
+   258	  if(*filename == 0) fp = fopen(file,"w");
+   259	  else fp = fopen(filename, "w");
+   260	
+   261	  for(i = 0; i < profile_data_nitems; i++){
+   262	    fprint_profile_csv(i,fp);
+   263	  }
+   264	
+   265	  fclose(fp);
+   266	
+   267	  flag = 0;
+   268	
+   269	  snprintf(s,MAX_LINE_LEN,"書き込みが完了しました．ファイルを確認してください．\n");
+   270	  send(new_s, s, sizeof(s), 0);
+   271	}
+   272	
+   273	/*[18]*/
+   274	void cmd_find(char *word, int new_s)
+   275	{
+   276	  int i;
+   277	  int count = 0;
+   278	  struct profile *p;
+   279	  char id[MAX_ID_LEN+1];
+   280	  char date[MAX_BIRTH_LEN+1];
+   281	  char s[MAX_LINE_LEN +1] = {'\0'};
+   282	
+   283	  for(i=0;i<profile_data_nitems;i++){
+   284	    p = &profile_data_store[i];
+   285	    sprintf(id, "%d", p->id);
+   286	    if(strcmp(id, word) == 0 ||
+   287	       strcmp(p->name, word) == 0 ||
+   288	       strcmp(date_to_string(date, &(p->birthday)), word) == 0 ||
+   289	       strcmp(p->home, word) == 0 ||
+   290	       strcmp(p->comment, word) == 0
+   291	       ){
+   292	      count++;
+   293	    }
+   294	  }
+   295	  snprintf(s, MAX_LINE_LEN, "%d", count);
+   296	  send(new_s, s, sizeof(s), 0);
+   297	
+   298	  for(i=0;i<profile_data_nitems;i++){
+   299	    p = &profile_data_store[i];
+   300	    sprintf(id, "%d", p->id);
+   301	    if(strcmp(id, word) == 0 ||
+   302	       strcmp(p->name, word) == 0 ||
+   303	       strcmp(date_to_string(date, &(p->birthday)), word) == 0 ||
+   304	       strcmp(p->home, word) == 0 ||
+   305	       strcmp(p->comment, word) == 0
+   306	       ){
+   307	      snprintf(s, MAX_LINE_LEN,
+   308		       "Id    : %d\nName  : %s\nBirth : %s\nAddr  : %s\nCom.  : %s\n", 
+   309		       p->id, p->name, date_to_string(date, &p->birthday), p->home, p->comment);
+   310	      send(new_s, s, sizeof(s), 0);
+   311	    }
+   312	  }
+   313	}
+   314	
+   315	/*[19]*/
+   316	void swap(struct profile *a, struct profile *b)
+   317	{
+   318	  struct profile tmp;
+   319	  
+   320	  tmp = *a;
+   321	  *a = *b;
+   322	  *b = tmp;
+   323	}
+   324	
+   325	/*[20]*/
+   326	int compare_date(struct date *d1, struct date *d2)
+   327	{
+   328	  if (d1->y != d2->y) return d1->y - d2->y;
+   329	  if (d1->m != d2->m) return d1->m - d2->m;
+   330	  return d1->d - d2->d;
+   331	}
+   332	
+   333	/*[21]*/
+   334	int profile_compare(struct profile *p1, struct profile *p2, int column)
+   335	{
+   336	  switch (column){
+   337	  case 1:
+   338	    return p1->id - p2->id; break;
+   339	  case 2:
+   340	    return strcmp(p1->name,p2->name); break;
+   341	  case 3:
+   342	    return compare_date(&(p1->birthday),&(p2->birthday)); break;
+   343	  case 4:
+   344	    return strcmp(p1->home,p2->home); break;
+   345	  case 5:
+   346	    return strcmp(p1->comment,p2->comment); break;
+   347	  }
+   348	  return 0; 
+   349	}
+   350	
+   351	
+   352	/*[22]*/
+   353	void cmd_sort(int param, int new_s)
+   354	{
+   355	  int i, j;
+   356	  char s[MAX_LINE_LEN + 1] = {'\0'};
+   357	  struct profile *p;
+   358	
+   359	  if(0< param && param <6){
+   360	  for (i = 0; i < profile_data_nitems -1; i++) {
+   361	    for (j = 0; j < profile_data_nitems -1; j++) {
+   362	      p = &profile_data_store[j];
+   363	      
+   364	      if (profile_compare(p, p+1, param) > 0)
+   365		swap(p, p+1);
+   366	    }
+   367	  }
+   368	  back = 0;
+   369	  snprintf(s, MAX_LINE_LEN, "ソートが完了しました．%%Pなどで確認してください．\n");
+   370	  send(new_s, s, sizeof(s), 0);
+   371	  }else{
+   372	    snprintf(s, MAX_LINE_LEN, "有効な引数は1~5です．正しい引数を入力してください．\n");
+   373	    send(new_s, s, sizeof(s), 0);
+   374	  }
+   375	}
+   376	
+   377	/*[23]*/
+   378	void ndelete(int nitems)
+   379	{
+   380	  int i;
+   381	  for(i=0;i<nitems;i++){
+   382	    free(profile_data_store[profile_data_nitems-1].comment);
+   383	    profile_data_nitems--;
+   384	  }
+   385	}
+   386	
+   387	/*[24]*/
+   388	void cmd_delete(int param, int new_s)
+   389	{
+   390	  int i;
+   391	  FILE *fp;
+   392	  char s[MAX_LINE_LEN + 1]={'\0'};
+   393	  fp = fopen("backup.txt", "w");
+   394	  mark = 0;
+   395	
+   396	  if(param == 0){
+   397	    fprint_profile_csv(profile_data_nitems-1,fp);
+   398	    ndelete(1);
+   399	  }
+   400	  else if(param > 0 && param< profile_data_nitems + 1){
+   401	    for(i=0;i<param;i++)
+   402	      fprint_profile_csv(profile_data_nitems-param+i,fp);
+   403	    ndelete(param);
+   404	  }
+   405	  else if(param < 0 && -profile_data_nitems -1 <  param){
+   406	    param = -param;
+   407	    fprint_profile_csv(param-1,fp);
+   408	    for(i=0;i<(profile_data_nitems -param);i++){
+   409	      swap(&profile_data_store[param-1+i]
+   410		   ,&profile_data_store[param+i]);
+   411	    }
+   412	    ndelete(1);
+   413	    mark = param;
+   414	  } else {
+   415	    snprintf(s, MAX_LINE_LEN ,"保存件数は%d件です\n正しい引数を入力してください\n"
+   416		    ,profile_data_nitems);
+   417	    send(new_s, s, sizeof(s), 0);
+   418	    return;
+   419	  }
+   420	  fclose(fp);
+   421	  back = 2;
+   422	  snprintf(s, MAX_LINE_LEN ,"delete ok\n");
+   423	  send(new_s, s, sizeof(s), 0);
+   424	}
+   425	
+   426	/*[25]*/
+   427	void cmd_add(int param, int new_s)
+   428	{
+   429	  int i;
+   430	  //  char line[MAX_LINE_LEN+1];
+   431	  char s[MAX_LINE_LEN +1] = {'\0'};
+   432	  struct profile *p;
+   433	  mark = -param;
+   434	
+   435	  if(0 < param && param< profile_data_nitems){
+   436	    snprintf(s, MAX_LINE_LEN, "CSV形式で名簿データを入力してください．\n");
+   437	    send(new_s, s, sizeof(s), 0);
+   438	
+   439	    //    get_line(stdin,line);
+   440	    bzero(&s, sizeof(s));
+   441	    recv(new_s, s, sizeof(s), 0);
+   442	     parse_line(s, new_s); 
+   443	
+   444	
+   445	    p = &profile_data_store[profile_data_nitems-1];
+   446	
+   447	    for(i=0;i<(profile_data_nitems - param); i++){
+   448	      swap(p-i-1,p-i);
+   449	    }
+   450	
+   451	    back = 3;
+   452	    /* snprintf(s, MAX_LINE_LEN, "登録が完了しました．\n"); */
+   453	    /* send(new_s, s, sizeof(s), 0); */
+   454	
+   455	  }else if(param == profile_data_nitems){
+   456	
+   457	    snprintf(s, MAX_LINE_LEN, "CSV形式で名簿データを入力してください．\n");
+   458	    send(new_s, s, sizeof(s), 0);
+   459	
+   460	    //   get_line(stdin,line);
+   461	    bzero(&s, sizeof(s));
+   462	    recv(new_s, s, sizeof(s), 0);
+   463	    parse_line(s, new_s); 
+   464	
+   465	    p = &profile_data_store[profile_data_nitems-1];
+   466	
+   467	    swap(p-1,p);
+   468	
+   469	    back = 3;
+   470	    /* snprintf(s, MAX_LINE_LEN, "登録が完了しました．\n"); */
+   471	    /* send(new_s, s, sizeof(s), 0); */
+   472	
+   473	  }else{
+   474	    snprintf(s, MAX_LINE_LEN, "登録件数は%d件です．正しい引数を入力してください．\n",profile_data_nitems);
+   475	    send(new_s, s, sizeof(s), 0);
+   476	  }
+   477	}
+   478	
+   479	/*[26]*/
+   480	void cmd_back(int new_s)
+   481	{
+   482	  int i;
+   483	  char s[MAX_LINE_LEN +1]={'\0'};
+   484	  struct profile *p;
+   485	
+   486	  switch(back){
+   487	
+   488	  case 0:
+   489	    snprintf(s, MAX_LINE_LEN,"%%Bコマンドは，%%R,%%Aコマンド実行後しか使用できません．\n");
+   490	    send(new_s, s,sizeof(s), 0);
+   491	    break;
+   492	    
+   493	  case 1:
+   494	    ndelete(ditems); 
+   495	    snprintf(s, MAX_LINE_LEN,"%%Rコマンド実行前の状態に戻りました．\n"); 
+   496	    send(new_s, s,sizeof(s), 0);
+   497	    break;
+   498	
+   499	  case 2:
+   500	    /* cmd_read("backup.txt", new_s); */
+   501	    /* p = &profile_data_store[profile_data_nitems-1]; */
+   502	    /* if(mark == 0){ */
+   503	    /*   for(i=0;i<profile_data_nitems-mark;i++) */
+   504	    /* 	swap(p-1-i,p-i); */
+   505	    /* } */
+   506	    snprintf(s, MAX_LINE_LEN,"%%Dコマンド実行前の状態に戻りました．\n");
+   507	    send(new_s, s,sizeof(s), 0);
+   508	    break;
+   509	    
+   510	  case 3:
+   511	    cmd_delete(mark, new_s); 
+   512	    // snprintf(s,MAX_LINE_LEN,"%%Aコマンド実行前の状態に戻りました．\n");
+   513	    // send(new_s, s,sizeof(s), 0);
+   514	    break;
+   515	   
+   516	  }
+   517	
+   518	  mark=0;
+   519	  back=0;
+   520	}
+   521	
+   522	/*[27]*/
+   523	void cmd_man(int new_s)
+   524	{
+   525	  char s[MAX_LINE_LEN + 1] = {'\0'};
+   526	  snprintf(s, MAX_LINE_LEN, "\nこのプログラムは標準入力から「ID，氏名，年月日，住所，備考」からなるコンマ区切り形式(CSV形式)の名簿データを受け付けて，それらを名簿中に登録する名簿管理プログラムである．\n下記では，%%で始まる各コマンド入力の仕様を説明している．\n\n%%Q      |終了(Quit)\n%%C      |登録件数などの表示(Check)\n%%P n    |先頭からn件表示(Print)\n%%R file |fileから読み込み(Read)\n%%W file |fileへ書き出し(Write)\n%%F word |wordを検索(Find)\n%%S n    |データをn番目の項目で整列(Sort)\n%%D n    |データをn件削除(Delete)\n%%A n    |n番目にデータを登録(Add)\n%%B      |直前の状態に戻る(Back)\n%%M      |各コマンドの仕様(Manual)\n\n");
+   527	  send(new_s, s, sizeof(s), 0);
+   528	}
+   529	
+   530	/*[28]*/
+   531	void exec_command(char cmd, char *param, int new_s) //全てのコマンドにnew_sわたす　いまはcだけ
+   532	{
+   533	  char s[MAX_LINE_LEN + 1] = {'\0'};
+   534	  switch (cmd) {
+   535	  case 'Q': cmd_quit(param, new_s); break; //-----------------[10] -aコマンド以外ok
+   536	  case 'C': cmd_check(new_s); break; //-----------------------[11] ok
+   537	  case 'P': cmd_print(atoi(param), new_s); break; //----------[14] ok
+   538	  case 'R': cmd_read(param, new_s); break; //-----------------[15] ok
+   539	  case 'W': cmd_write(param, new_s); break; //----------------[17] ok
+   540	  case 'F': cmd_find(param, new_s); break; //-----------------[18] ok
+   541	  case 'S': cmd_sort(atoi(param), new_s); break; //-----------[22] ok
+   542	  case 'D': cmd_delete(atoi(param), new_s); break; //---------[24] ok 
+   543	  case 'A': cmd_add(atoi(param), new_s); break; //------------[25] ok
+   544	  case 'B': cmd_back(new_s); break; //------------------------[26] case2(D)以外ok
+   545	  case 'M': cmd_man(new_s); break; //-------------------------[27] ok
+   546	  default:
+   547	    snprintf(s, MAX_LINE_LEN, "%cは登録されていないコマンドです. %%Mなどでコマンドを確認してください．\n",  cmd);
+   548	    send(new_s, s, sizeof(s), 0);
+   549	    break;
+   550	  }
+   551	}
+   552	
+   553	
+   554	
+   555	/*[29]*/
+   556	void parse_line(char *line, int new_s)
+   557	{
+   558	  char s[MAX_LINE_LEN +1] = {'\0'};
+   559	  if(line[0] == '%') {
+   560	    exec_command(line[1], &line[3], new_s);
+   561	  } else {
+   562	    new_profile(&profile_data_store[profile_data_nitems], line);
+   563	    profile_data_nitems++;
+   564	    back = 1;
+   565	    ditems = 1;
+   566	    snprintf(s,MAX_LINE_LEN, "New Data added\n");
+   567	    send(new_s, s, sizeof(s), 0);
+   568	  }/* else if (new_profile(&profile_data_store[profile_data_nitems], line)!=NULL){
+   569	      profile_data_nitems++;
+   570	      back = 1;
+   571	      ditems = 1;
+   572	      
+   573	      send(new_s, s, sizeof(s), 0);
+   574	      } else {
+   575	      fprintf(stderr,"入力形式が違います．\n");
+   576	      }*/
+   577	}
+\end{verbatim}
+
+\newpage
+
+\subsubsection{meibo-client.c}
+\begin{verbatim}
+     1	#include <sys/fcntl.h>
+     2	#include <sys/types.h>
+     3	#include <sys/socket.h>
+     4	#include <sys/stat.h>
+     5	#include <netinet/in.h>
+     6	#include <netdb.h>
+     7	#include <stdio.h>
+     8	#include <string.h>
+     9	#include <strings.h>
+    10	#include <stdlib.h>
+    11	#include <unistd.h> //close
+    12	#include <fcntl.h>
+    13	
+    14	#define PORT_NO 10016
+    15	#define MAX_LINE_LEN 1024
+    16	
+    17	int subst(char *str, char c1, char c2)
+    18	{
+    19	  int n = 0;
+    20	
+    21	  while (*str) {
+    22	    if (*str == c1) {
+    23	      *str = c2;
+    24	      n++;
+    25	    }
+    26	    str++;
+    27	  }
+    28	  return n;
+    29	}
+    30	
+    31	int get_line(FILE *fp,char *line)
+    32	{
+    33	  if (fgets(line, MAX_LINE_LEN + 1, fp) == NULL)
+    34	    return 0;
+    35	
+    36	  subst(line, '\n','\0');
+    37	
+    38	  return 1;
+    39	}
+    40	
+    41	int main(int argc, char *argv[]){
+    42	
+    43	  /*通信相手のIPアドレスの取得*/
+    44	
+    45	  struct hostent* hostname;
+    46	  if(argv < 0){
+    47	    printf("Error : arguments number\n");
+    48	  }
+    49	
+    50	  hostname = gethostbyname(argv[1]);
+    51	  if(hostname == NULL){
+    52	    printf("Error : hostname is NULL\n");
+    53	  }
+    54	
+    55	  /*ソケットを作成する*/
+    56	
+    57	  int sockfd;
+    58	  sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    59	  if(sockfd < 0){
+    60	    printf("Error : can't make socket\n");
+    61	    return(-1);
+    62	  }
+    63	
+    64	  /*コネクションを確立する*/
+    65	
+    66	  struct sockaddr_in client_addr;
+    67	
+    68	  // memset((char*)&client_addr.sin_addr, 0, sizeof(client_addr.sin_addr));
+    69	
+    70	  memset((char*)&client_addr, 0, sizeof(client_addr));
+    71	
+    72	  client_addr.sin_family = hostname -> h_addrtype;
+    73	  memcpy((char*)&client_addr.sin_addr, (char*)hostname -> h_addr, hostname -> h_length);
+    74	  client_addr.sin_port = htons(PORT_NO);
+    75	
+    76	  if(connect(sockfd, (struct sockaddr *)&client_addr, sizeof(client_addr)) < 0){
+    77	    printf("Error : can't connect\n");
+    78	    return(-1);
+    79	  }
+    80	
+    81	  /*メッセージを送信する*/
+    82	
+    83	  while(1){
+    84	    printf("クライアントの入力待ち\n");
+    85	
+    86	    char line[MAX_LINE_LEN + 1];
+    87	    get_line(stdin, line);
+    88	    int check;
+    89	    check = send(sockfd, line, sizeof(line), 0);
+    90	
+    91	    if(check < 0){
+    92	      printf("Error : can't send\n");
+    93	      return(-1);
+    94	    };
+    95	
+    96	    /*メッセージを受信する*/
+    97	    char kekka[MAX_LINE_LEN + 1];
+    98	    if((line[0]=='%' && line[1]=='P') || (line[0]=='%' && line[1]=='F')){
+    99	      bzero(&kekka, sizeof(kekka));
+   100	      recv(sockfd, kekka, sizeof(kekka), 0); //回数を受け取る
+   101	      int times;
+   102	      int l;
+   103	      times = atoi(kekka);
+   104	      for(l=0; l<times; l++){
+   105		bzero(&kekka, sizeof(kekka));
+   106		recv(sockfd, kekka, sizeof(kekka), 0);
+   107		printf("%s\n", kekka);
+   108	      }
+   109	
+   110	    }else if(line[0]=='%' && line[1]=='A'){
+   111		bzero(&kekka, sizeof(kekka));
+   112		recv(sockfd, kekka, sizeof(kekka), 0);
+   113		printf("%s\n", kekka);
+   114	
+   115		bzero(&kekka, sizeof(kekka));
+   116		get_line(stdin,kekka);
+   117		send(sockfd, kekka, sizeof(kekka), 0);
+   118	
+   119		bzero(&kekka, sizeof(kekka));
+   120		recv(sockfd, kekka, sizeof(kekka), 0);
+   121		printf("%s\n", kekka);
+   122	
+   123	
+   124	    }else if(line[0]=='%' && line[1]=='B'){
+   125	      	bzero(&kekka, sizeof(kekka));
+   126		recv(sockfd, kekka, sizeof(kekka), 0);
+   127		//	printf("%s\n", kekka);
+   128		printf("Undo!\n");
+   129	
+   130	    }else if(line[0]=='%'){
+   131	      bzero(&kekka, sizeof(kekka));
+   132	      recv(sockfd, kekka, sizeof(kekka), 0);
+   133	      printf("%s\n", kekka);
+   134	      if(line[1]=='Q'){
+   135		//	  exit(0);
+   136		return 0;
+   137	      }
+   138	    }else{
+   139	      bzero(&kekka, sizeof(kekka));
+   140	      recv(sockfd, kekka, sizeof(kekka), 0);
+   141	      printf("%s\n", kekka);
+   142	    }
+   143	    bzero(&line, sizeof(line));
+   144	    /* // while(1){ */
+   145	    /*   char kekka[MAX_LINE_LEN + 1]; */
+   146	    /*   if(recv(sockfd, kekka, sizeof(kekka), 0) < 0){ */
+   147	    /* 	printf("Error : can't recv\n"); */
+   148	    /* 	return(-1); */
+   149	    /*   }; */
+   150	
+   151	    /*   printf("%s\n", kekka); */
+   152	
+   153	  }
+   154	
+   155	  /*ソケットを削除する*/
+   156	  if(close(sockfd) < 0){
+   157	    printf("Error : can't close\n");
+   158	    return(-1);
+   159	  }
+   160	  return 0;
+   161	}
+\end{verbatim}
+
+\newpage
+
+\subsubsection{meibo-server.c}
+\begin{verbatim}
+     1	#include <stdio.h>
+     2	#include <string.h>
+     3	#include <stdlib.h>
+     4	#include <sys/fcntl.h>
+     5	#include <sys/types.h>
+     6	#include <sys/socket.h>
+     7	#include <sys/stat.h>
+     8	#include <netinet/in.h>
+     9	#include <netdb.h>
+    10	#include <string.h>
+    11	#include <strings.h>
+    12	#include <unistd.h> //close
+    13	#include <fcntl.h>
+    14	#include <errno.h>
+    15	
+    16	#define PORT_NO 10016
+    17	#define MAX_LINE_LEN 1024
+    18	
+    19	void parse_line(char *line, int new_s);
+    20	
+    21	int main(){
+    22	
+    23	  /*ソケットを作成する*/
+    24	
+    25	  int sockfd;
+    26	  int yes = 1;
+    27	  sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    28	  if(sockfd < 0){
+    29	    printf("Error : can't make socket\n");
+    30	    return(-1);
+    31	  }
+    32	
+    33	  /* SO_REUSEADDR をつける*/
+    34	
+    35	  int ret;
+    36	  ret = setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR,(const char *)&yes, sizeof(yes));
+    37	  if(ret < 0){
+    38	    printf("Error : can't opt");
+    39	    return 0;
+    40	  }
+    41	
+    42	  /*ソケットに名前をつける*/
+    43	
+    44	  struct sockaddr_in reader_addr;
+    45	
+    46	  memset((char*)&reader_addr, 0, sizeof(reader_addr));
+    47	
+    48	  reader_addr.sin_family = AF_INET; /*インターネットドメイン*/
+    49	  reader_addr.sin_addr.s_addr = htonl(INADDR_ANY); /*任意のIPアドレスを受付*/
+    50	  reader_addr.sin_port = htons(PORT_NO); /*接続待ちのポート番号を設定*/
+    51	
+    52	  int name;
+    53	  name = bind(sockfd, (struct sockaddr *)&reader_addr, sizeof(reader_addr));
+    54	  if(name < 0){
+    55	    perror("bind");
+    56	    printf("Error : bind\n");
+    57	    return(-1);
+    58	  }
+    59	
+    60	  /*接続要求を待つ*/
+    61	
+    62	  int wait;
+    63	  wait = listen(sockfd,5);
+    64	  if(wait < 0){
+    65	    printf("Error : listen\n");
+    66	    close(sockfd);
+    67	    return(-1);
+    68	  }
+    69	
+    70	  /*接続要求を受け付ける*/
+    71	  int new_s;
+    72	    while(1){
+    73	
+    74	  struct sockaddr_in client;
+    75	  
+    76	  socklen_t len = sizeof(client);
+    77	  new_s = accept(sockfd, (struct sockaddr *)&client, &len);
+    78	  if(new_s < 0){
+    79	    printf("Error : accept\n");
+    80	    return(-1);
+    81	  }
+    82	
+    83	  /*メッセージを受信する*/
+    84	
+    85	  while(1){
+    86	    char buf[MAX_LINE_LEN + 1];
+    87	    printf("クライアントの入力待ち \n");
+    88	    recv(new_s, buf, sizeof(buf), 0);
+    89	    printf("入力 %s\n",buf);
+    90	    if(buf[0]=='%' && buf[1]=='Q'){
+    91	    parse_line(buf, new_s);
+    92	    printf("処理終了\n\n");
+    93	    break;
+    94	    }else{
+    95	      printf("サーバの処理開始 \n");
+    96	
+    97	      parse_line(buf, new_s);
+    98	
+    99	      printf("入力 after parse_line(): %s\n", buf);
+   100	      bzero(&buf, sizeof(buf));
+   101	      printf("処理終了\n\n");
+   102	    }
+   103	  }
+   104	
+   105	
+   106	    /* /\*メッセージの送信*\/ */
+   107	    /* memset(buf,0,sizeof(s)); */
+   108	    /* send(new_s, buf, sizeof(buf), 0); */
+   109	
+   110	  }
+   111	
+   112	  /*ソケットの削除*/
+   113	
+   114	  close(new_s);
+   115	
+   116	  //  } dekai while
+   117	
+   118	  return 0;
+   119	
+   120	}
+\end{verbatim}
 
 \end{document}
 
