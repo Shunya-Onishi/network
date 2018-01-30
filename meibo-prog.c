@@ -193,9 +193,9 @@ void cmd_print(int nitems, int new_s)
       //     printf("\n");
     }
   }else if(nitems < 0){
-    end=end+nitems;
+    end=end-(-nitems);
     if(end< 0) end = 0;    
-    snprintf(s, MAX_LINE_LEN, "%d", end);
+    snprintf(s, MAX_LINE_LEN, "%d", -nitems);
     send(new_s, s, sizeof(s), 0);
     for(i=end;i < profile_data_nitems;i++){
       print_profile(&profile_data_store[i], new_s);
