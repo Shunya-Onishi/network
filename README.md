@@ -35,3 +35,4 @@ meibo-server.c 名簿管理サーバ
 meibo-client.c 名簿管理クライアント
 
 meibo-prog.c 名簿管理プログラム本体
+# network
